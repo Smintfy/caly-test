@@ -5,7 +5,6 @@
 #define SCREEN_HEIGHT 720
 #define MAX_FPS 60
 #define FRAMES_SPEED 6
-#define PLAYER_SPEED 4
 
 typedef enum
 {
@@ -19,6 +18,7 @@ typedef struct Player
 {
 	Vector2 position;
 	Texture2D texture;
+	int speed;
 
 	// Animation related
 	Rectangle frameRect;
@@ -31,18 +31,19 @@ typedef struct Player
 	float frame_height;
 } Player;
 
-Player InitPlayer()
+Player InitPlayer(Rectangle *rect)
 {
 	Player player;
 
-	player.texture = LoadTexture("assets/acly.png");
+	player.texture = LoadTexture("assets/Acly.png");
 
 	player.frame_width = (float)player.texture.width / 3;      // The width of each individual sprite
 	player.frame_height = (float)player.texture.height / 4;    // The height of each individual sprite
 
-	float player_x_center = (float)(SCREEN_WIDTH - player.frame_width) / 2;
-	float player_y_center = (float)(SCREEN_HEIGHT - player.frame_height) / 2;
+	float player_x_center = rect->x + (rect->width - player.frame_width) / 2;
+	float player_y_center = rect->y + (rect->height - player.frame_height) / 2;
 	player.position = (Vector2){player_x_center, player_y_center};
+	player.speed = 4;
 
 	player.frameRect = (Rectangle){0.0f, 0.0f, player.frame_width, player.frame_height};
 	player.framesCounter = 0;
@@ -105,8 +106,8 @@ void UpdatePlayer(Player *player)
         };
     }
 
-    player->position.x += playerDirection.x * PLAYER_SPEED;
-    player->position.y += playerDirection.y * PLAYER_SPEED;
+    player->position.x += playerDirection.x * player->speed;
+    player->position.y += playerDirection.y * player->speed;
 
     player->frameRect.y = player->currentSequence * player->frame_height;
     player->frameRect.x = (isMoving ? player->currentFrame : 0) * player->frame_width;
@@ -116,16 +117,21 @@ int main()
 {
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "callie - test");
 
-    Player player = InitPlayer();
-    Texture2D floor = LoadTexture("assets/Floor.png");
+    Rectangle tempFloorRect = {
+        (float)(SCREEN_WIDTH - 600) / 2,
+        (float)(SCREEN_HEIGHT - 300) / 2,
+        600, 300
+    };
+
+    Player player = InitPlayer(&tempFloorRect);
 
     Camera2D camera = { 0 };
     camera.target = (Vector2){
         player.position.x + (float)player.frame_width / 2,
         player.position.y + (float)player.frame_height / 2
     };
-    camera.offset = (Vector2){SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f}; // Center of the screen
-    camera.zoom = 1.0f; // Default zoom level
+    camera.offset = (Vector2){SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f};
+    camera.zoom = 1.0f;
 
     SetTargetFPS(60);
 
@@ -143,21 +149,16 @@ int main()
         ClearBackground(BLACK);
 
         BeginMode2D(camera);
-            DrawTextureRec(
-                floor,
-                (Rectangle){0.0f, 0.0f, floor.width, floor.height},
-                (Vector2){(float)(SCREEN_WIDTH - floor.width) / 2, (float)(SCREEN_HEIGHT - floor.height) / 2},
-                WHITE
-            );
+            DrawRectangleRec(tempFloorRect, GRAY);
             DrawTextureRec(player.texture, player.frameRect, player.position, WHITE);
         EndMode2D();
 
         DrawText(TextFormat("FPS: %d", GetFPS()), 16, 16, 16, WHITE);
+        DrawText(TextFormat("X, Y: %f, %f", player.position.x, player.position.y), 16, 40, 16, WHITE);
 
         EndDrawing();
     }
 
-    UnloadTexture(floor);
     UnloadPlayer(&player);
     CloseWindow();
 
