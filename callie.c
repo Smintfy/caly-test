@@ -117,6 +117,15 @@ int main()
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "callie - test");
 
     Player player = InitPlayer();
+    Texture2D floor = LoadTexture("assets/Floor.png");
+
+    Camera2D camera = { 0 };
+    camera.target = (Vector2){
+        player.position.x + (float)player.frame_width / 2,
+        player.position.y + (float)player.frame_height / 2
+    };
+    camera.offset = (Vector2){SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f}; // Center of the screen
+    camera.zoom = 1.0f; // Default zoom level
 
     SetTargetFPS(60);
 
@@ -124,13 +133,31 @@ int main()
     {
         UpdatePlayer(&player);
 
+        camera.target = (Vector2){
+            player.position.x + (float)player.frame_width / 2,
+            player.position.y + (float)player.frame_height / 2
+        };
+
         BeginDrawing();
-            ClearBackground(BLACK);
+
+        ClearBackground(BLACK);
+
+        BeginMode2D(camera);
+            DrawTextureRec(
+                floor,
+                (Rectangle){0.0f, 0.0f, floor.width, floor.height},
+                (Vector2){(float)(SCREEN_WIDTH - floor.width) / 2, (float)(SCREEN_HEIGHT - floor.height) / 2},
+                WHITE
+            );
             DrawTextureRec(player.texture, player.frameRect, player.position, WHITE);
-            DrawText(TextFormat("FPS: %d", GetFPS()), 16, 16, 16, WHITE);
+        EndMode2D();
+
+        DrawText(TextFormat("FPS: %d", GetFPS()), 16, 16, 16, WHITE);
+
         EndDrawing();
     }
 
+    UnloadTexture(floor);
     UnloadPlayer(&player);
     CloseWindow();
 
