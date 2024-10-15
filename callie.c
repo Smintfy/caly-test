@@ -290,7 +290,6 @@ int main()
 
         BeginMode2D(camera);
             DrawTileMap();
-            // DrawRectangleRec(tempFloorRect, GRAY);
 
             // Penger
             DrawTextureRec(penger.texture, penger.frameRect, penger.position, WHITE);
@@ -346,7 +345,7 @@ int main()
     }
 
     UnloadMusicStream(music);
-    // UnloadObject(&penger);
+    UnloadObject(&penger);
     UnloadPlayer(&player);
     CloseWindow();
 
