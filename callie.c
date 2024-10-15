@@ -1,10 +1,23 @@
 #include "include/raylib.h"
-#include <stdbool.h>
+#include "include/raymath.h"
+#include <stdio.h>
 
 #define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 720
 #define MAX_FPS 60
 #define FRAMES_SPEED 6
+
+#define TILE_SIZE 128
+#define MAP_WIDTH 7
+#define MAP_HEIGHT 4
+
+int tileMap[MAP_HEIGHT][MAP_WIDTH] =
+{
+    {1, 0, 1, 0, 1, 0, 0},
+    {1, 1, 1, 1, 1, 0, 1},
+    {0, 1, 0, 1, 0, 0, 1},
+    {1, 1, 0, 1, 1, 1, 1},
+};
 
 typedef enum
 {
@@ -30,8 +43,8 @@ typedef struct Player
 	int framesCounter;
 
 	// helper
-	float frame_width;
-	float frame_height;
+	float width;
+	float height;
 } Player;
 
 typedef struct Object
@@ -42,21 +55,25 @@ typedef struct Object
     Rectangle frameRect;
 } Object;
 
-Player InitPlayer(Rectangle *rect)
+Player InitPlayer()
 {
 	Player player;
 
 	player.texture = LoadTexture("assets/Acly.png");
 
-	player.frame_width = (float)player.texture.width / 3;      // The width of each individual sprite
-	player.frame_height = (float)player.texture.height / 4;    // The height of each individual sprite
+	player.width = (float)player.texture.width / 3;      // The width of each individual sprite
+	player.height = (float)player.texture.height / 4;    // The height of each individual sprite
 
-	float player_x_center = rect->x + (rect->width - player.frame_width) / 2;
-	float player_y_center = rect->y + (rect->height - player.frame_height) / 2;
-	player.position = (Vector2){player_x_center, player_y_center};
+    int spawnX = 1;
+    int spawnY = 1;
+
+    player.position = (Vector2){
+        spawnX * TILE_SIZE,
+        spawnY * TILE_SIZE
+    };
+
 	player.speed = 4;
-
-	player.frameRect = (Rectangle){0.0f, 0.0f, player.frame_width, player.frame_height};
+	player.frameRect = (Rectangle){0.0f, 0.0f, player.width, player.height};
 	player.framesCounter = 0;
 	player.currentSequence = 0;
 	player.currentFrame = 0;
@@ -64,19 +81,30 @@ Player InitPlayer(Rectangle *rect)
 	return player;
 }
 
-Object InitObject(Texture2D *objectTexture, Vector2 *position)
+Object InitObject(Texture2D *objectTexture, Vector2 tilePosition)
 {
     Object object;
 
     object.texture = *objectTexture;
-    object.position = *position;
 
-    object.frameRect = (Rectangle){0.0f, 0.0f, object.texture.width, object.texture.height};
+    object.position = (Vector2)
+    {
+        tilePosition.x * TILE_SIZE,
+        tilePosition.y * TILE_SIZE
+    };
+
+    object.frameRect = (Rectangle)
+    {
+        0.0f,
+        0.0f,
+        object.texture.width,
+        object.texture.height
+    };
 
     object.detection = (Rectangle)
     {
-        position->x,
-        position->y,
+        object.position.x,
+        object.position.y,
         object.texture.width,
         object.texture.height
     };
@@ -94,7 +122,43 @@ void UnloadObject(Object *object)
     UnloadTexture(object->texture);
 }
 
-void UpdatePlayer(Player *player, Rectangle *rect)
+void DrawTileMap()
+{
+    for(int y = 0; y < MAP_HEIGHT; y++)
+    {
+        for(int x = 0; x < MAP_WIDTH; x++)
+        {
+            if (tileMap[y][x] == 1) DrawRectangle(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE, GRAY);
+        }
+    }
+}
+
+bool CheckCollisionTileMap(Rectangle playerRect)
+{
+    int tileStartX = (int)floorf(playerRect.x / TILE_SIZE);
+    int tileStartY = (int)floorf(playerRect.y / TILE_SIZE);
+    int tileEndX = (int)floorf((playerRect.x + playerRect.width - 1) / TILE_SIZE);
+    int tileEndY = (int)floorf((playerRect.y + playerRect.height - 1) / TILE_SIZE);
+
+    // Check if player is outside the map
+    if (tileStartX < 0 || tileStartY < 0 || tileEndX >= MAP_WIDTH || tileEndY >= MAP_HEIGHT) return true;
+
+    for (int y = tileStartY; y <= tileEndY; y++)
+    {
+        for (int x = tileStartX; x <= tileEndX; x++)
+        {
+            // Check current tile
+            if (tileMap[y][x] == 0)
+            {
+                Rectangle tileRect = {x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE};
+                if (CheckCollisionRecs(playerRect, tileRect)) return true;
+            }
+        }
+    }
+    return false;
+}
+
+void UpdatePlayer(Player *player)
 {
     Vector2 playerDirection = {0.0f, 0.0f};
     bool isMoving = false;
@@ -102,7 +166,6 @@ void UpdatePlayer(Player *player, Rectangle *rect)
     player->frameRect.x = 0.0f;
     player->framesCounter++;
 
-    // Limit of the player animation frame update
     if (player->framesCounter >= (MAX_FPS / FRAMES_SPEED))
     {
         player->framesCounter = 0;
@@ -123,7 +186,7 @@ void UpdatePlayer(Player *player, Rectangle *rect)
         playerDirection.y = 1.0f;
         player->currentSequence = DOWN;
         isMoving = true;
-    };
+    }
 
     // Prevent diagonal movement
     if (playerDirection.y == 0.0f)
@@ -139,65 +202,46 @@ void UpdatePlayer(Player *player, Rectangle *rect)
             playerDirection.x = 1.0f;
             player->currentSequence = RIGHT;
             isMoving = true;
-        };
+        }
     }
 
-    Vector2 newPosition =
-    {
+    Vector2 newPosition = {
         player->position.x + playerDirection.x * player->speed,
         player->position.y + playerDirection.y * player->speed
     };
 
-    Rectangle newBound = (Rectangle)
-    {
-        newPosition.x + 6 * 3.2,
-        newPosition.y,
-        player->frame_width - 12 * 3.2,
-        player->frame_height
-    };
-
-    Rectangle newCollision = (Rectangle)
-    {
-        newBound.x + 6.5 * 1.6,
-        newBound.y + newBound.height - 3.2f * 2.5,
-        13 * 3.2,
+    Rectangle newCollision = {
+        newPosition.x + 6.5f * 1.6f + 6 * 3.2f,
+        newPosition.y + player->height - 3.2f * 2.5f,
+        13 * 3.2f,
         6.4f
     };
 
-    if (newCollision.x >= rect->x &&
-        newCollision.x + newCollision.width <= rect->x + rect->width &&
-        newCollision.y >= rect->y &&
-        newCollision.y + newCollision.height <= rect->y + rect->height)
-    {
-        player->position = newPosition;
-    }
+    if (!CheckCollisionTileMap(newCollision)) player->position = newPosition;
 
-    player->frameRect.y = player->currentSequence * player->frame_height;
-    player->frameRect.x = (isMoving ? player->currentFrame : 0) * player->frame_width;
-
-    player->bound = (Rectangle)
-    {
-        player->position.x + 6 * 3.2,
+    player->bound = (Rectangle){
+        player->position.x + 6 * 3.2f,
         player->position.y,
-        player->frame_width - 12 * 3.2,
-        player->frame_height
+        player->width - 12 * 3.2f,
+        player->height
     };
 
-    player->collision = (Rectangle)
-    {
-        player->bound.x + 6.5 * 1.6,
-        player->bound.y + player->bound.height - 3.2f * 2.5,
-        13 * 3.2,
+    player->collision = (Rectangle){
+        player->bound.x + 6.5f * 1.6f,
+        player->bound.y + player->bound.height - 3.2f * 2.5f,
+        13 * 3.2f,
         6.4f
     };
 
-    player->detection = (Rectangle)
-    {
-        player->position.x + (player->frame_width / 2) - (8 * 3.2f / 2),
-        player->position.y + (player->frame_height / 2) - (8 * 3.2f / 2),
-        8 * 3.2,
-        8 * 3.2
+    player->detection = (Rectangle){
+        player->position.x + (player->width / 2) - (8 * 3.2f / 2),
+        player->position.y + (player->height / 2) - (8 * 3.2f / 2),
+        8 * 3.2f,
+        8 * 3.2f
     };
+
+    player->frameRect.y = player->currentSequence * player->height;
+    player->frameRect.x = (isMoving ? player->currentFrame : 0) * player->width;
 }
 
 int main()
@@ -205,36 +249,25 @@ int main()
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "callie - test");
     InitAudioDevice();
 
-    Rectangle tempFloorRect =
-    {
-        (float)(SCREEN_WIDTH - 600) / 2,
-        (float)(SCREEN_HEIGHT - 300) / 2,
-        600, 300
-    };
-
-    Player player = InitPlayer(&tempFloorRect);
+    Player player = InitPlayer();
 
     // Credit to https://penger.city/
     Music music = LoadMusicStream("assets/STOMP.ogg");
-    Image penger_img = LoadImage("assets/Penger.png");
-    ImageResize(&penger_img, penger_img.width * 2, penger_img.height * 2);
-    Texture2D penger_texture = LoadTextureFromImage(penger_img);
-    UnloadImage(penger_img);
+    Image pengerImage = LoadImage("assets/Penger.png");
+    ImageResize(&pengerImage, pengerImage.width * 2, pengerImage.height * 2);
+    Texture2D pengerTexture = LoadTextureFromImage(pengerImage);
+    UnloadImage(pengerImage);
 
-    Vector2 penger_pos = (Vector2)
-    {
-        tempFloorRect.x + (tempFloorRect.width - penger_texture.width) / 2,
-        tempFloorRect.y + 20.0f - penger_texture.height
-    };
+    Vector2 pengerTilePosition = {2.0f + 0.25f , 0.0f};
+    Object penger = InitObject(&pengerTexture, pengerTilePosition);
 
-    Object penger = InitObject(&penger_texture, &penger_pos);
     bool showDialog = false;
 
     Camera2D camera = { 0 };
     camera.target = (Vector2)
     {
-        player.position.x + (float)player.frame_width / 2,
-        player.position.y + (float)player.frame_height / 2
+        player.position.x + (float)player.width / 2,
+        player.position.y + (float)player.height / 2
     };
     camera.offset = (Vector2){SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f};
     camera.zoom = 1.0f;
@@ -243,12 +276,12 @@ int main()
 
     while(!WindowShouldClose())
     {
-        UpdatePlayer(&player, &tempFloorRect);
+        UpdatePlayer(&player);
 
         camera.target = (Vector2)
         {
-            player.position.x + (float)player.frame_width / 2,
-            player.position.y + (float)player.frame_height / 2
+            player.position.x + (float)player.width / 2,
+            player.position.y + (float)player.height / 2
         };
 
         BeginDrawing();
@@ -256,7 +289,8 @@ int main()
         ClearBackground(BLACK);
 
         BeginMode2D(camera);
-            DrawRectangleRec(tempFloorRect, GRAY);
+            DrawTileMap();
+            // DrawRectangleRec(tempFloorRect, GRAY);
 
             // Penger
             DrawTextureRec(penger.texture, penger.frameRect, penger.position, WHITE);
@@ -272,7 +306,7 @@ int main()
         if (CheckCollisionRecs(player.detection, penger.detection))
         {
             if (GetKeyPressed() == KEY_E) showDialog = !showDialog;
-            DrawText("Object Detected!", 16, 64, 16, GREEN);
+            DrawText("Object Detected!", 16, 88, 16, GREEN);
         }
         else
         {
@@ -297,7 +331,7 @@ int main()
             DrawRectangle(dialogBoxX, dialogBoxY, dialogBoxWidth, dialogBoxHeight, BLACK);
             DrawRectangleLinesEx((Rectangle){dialogBoxX, dialogBoxY, dialogBoxWidth, dialogBoxHeight}, 2, WHITE);
 
-            const char* dialogText = "Penger: Your mom's banger!";
+            const char* dialogText = "Penger: I'm Penger. Your mom's banger!";
 
             float textOffsetX = 16;
             float textOffsetY = 16;
@@ -306,12 +340,13 @@ int main()
 
         DrawText(TextFormat("FPS: %d", GetFPS()), 16, 16, 16, WHITE);
         DrawText(TextFormat("X, Y: %f, %f", player.position.x, player.position.y), 16, 40, 16, WHITE);
+        DrawText(TextFormat("Tx, Ty: %d, %d", (int)floor(player.collision.x / TILE_SIZE), (int)floor(player.collision.y / TILE_SIZE)), 16, 64, 16, WHITE);
 
         EndDrawing();
     }
 
     UnloadMusicStream(music);
-    UnloadObject(&penger);
+    // UnloadObject(&penger);
     UnloadPlayer(&player);
     CloseWindow();
 
