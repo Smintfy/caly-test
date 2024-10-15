@@ -73,7 +73,8 @@ Object InitObject(Texture2D *objectTexture, Vector2 *position)
 
     object.frameRect = (Rectangle){0.0f, 0.0f, object.texture.width, object.texture.height};
 
-    object.detection = (Rectangle){
+    object.detection = (Rectangle)
+    {
         position->x,
         position->y,
         object.texture.width,
@@ -141,13 +142,27 @@ void UpdatePlayer(Player *player, Rectangle *rect)
         };
     }
 
-    Vector2 newPosition = {
+    Vector2 newPosition =
+    {
         player->position.x + playerDirection.x * player->speed,
         player->position.y + playerDirection.y * player->speed
     };
 
-    Rectangle newBound = (Rectangle){newPosition.x + 6 * 3.2, newPosition.y, player->frame_width - 12 * 3.2, player->frame_height};
-    Rectangle newCollision = (Rectangle){newBound.x + 6.5 * 1.6, newBound.y + newBound.height - 3.2f * 2.5, 13 * 3.2, 6.4f};
+    Rectangle newBound = (Rectangle)
+    {
+        newPosition.x + 6 * 3.2,
+        newPosition.y,
+        player->frame_width - 12 * 3.2,
+        player->frame_height
+    };
+
+    Rectangle newCollision = (Rectangle)
+    {
+        newBound.x + 6.5 * 1.6,
+        newBound.y + newBound.height - 3.2f * 2.5,
+        13 * 3.2,
+        6.4f
+    };
 
     if (newCollision.x >= rect->x &&
         newCollision.x + newCollision.width <= rect->x + rect->width &&
@@ -160,21 +175,24 @@ void UpdatePlayer(Player *player, Rectangle *rect)
     player->frameRect.y = player->currentSequence * player->frame_height;
     player->frameRect.x = (isMoving ? player->currentFrame : 0) * player->frame_width;
 
-    player->bound = (Rectangle){
+    player->bound = (Rectangle)
+    {
         player->position.x + 6 * 3.2,
         player->position.y,
         player->frame_width - 12 * 3.2,
         player->frame_height
     };
 
-    player->collision = (Rectangle){
+    player->collision = (Rectangle)
+    {
         player->bound.x + 6.5 * 1.6,
         player->bound.y + player->bound.height - 3.2f * 2.5,
         13 * 3.2,
         6.4f
     };
 
-    player->detection = (Rectangle){
+    player->detection = (Rectangle)
+    {
         player->position.x + (player->frame_width / 2) - (8 * 3.2f / 2),
         player->position.y + (player->frame_height / 2) - (8 * 3.2f / 2),
         8 * 3.2,
@@ -187,21 +205,24 @@ int main()
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "callie - test");
     InitAudioDevice();
 
-    Rectangle tempFloorRect = {
+    Rectangle tempFloorRect =
+    {
         (float)(SCREEN_WIDTH - 600) / 2,
         (float)(SCREEN_HEIGHT - 300) / 2,
         600, 300
     };
 
     Player player = InitPlayer(&tempFloorRect);
-    Music music = LoadMusicStream("assets/STOMP.ogg");
 
+    // Credit to https://penger.city/
+    Music music = LoadMusicStream("assets/STOMP.ogg");
     Image penger_img = LoadImage("assets/Penger.png");
     ImageResize(&penger_img, penger_img.width * 2, penger_img.height * 2);
     Texture2D penger_texture = LoadTextureFromImage(penger_img);
     UnloadImage(penger_img);
 
-    Vector2 penger_pos = (Vector2){
+    Vector2 penger_pos = (Vector2)
+    {
         tempFloorRect.x + (tempFloorRect.width - penger_texture.width) / 2,
         tempFloorRect.y + 20.0f - penger_texture.height
     };
@@ -210,7 +231,8 @@ int main()
     bool showDialog = false;
 
     Camera2D camera = { 0 };
-    camera.target = (Vector2){
+    camera.target = (Vector2)
+    {
         player.position.x + (float)player.frame_width / 2,
         player.position.y + (float)player.frame_height / 2
     };
@@ -223,7 +245,8 @@ int main()
     {
         UpdatePlayer(&player, &tempFloorRect);
 
-        camera.target = (Vector2){
+        camera.target = (Vector2)
+        {
             player.position.x + (float)player.frame_width / 2,
             player.position.y + (float)player.frame_height / 2
         };
@@ -259,7 +282,8 @@ int main()
 
         if (showDialog)
         {
-            if (!IsMusicStreamPlaying(music)) {
+            if (!IsMusicStreamPlaying(music))
+            {
                 PlayMusicStream(music);
             }
 
