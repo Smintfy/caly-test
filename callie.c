@@ -18,6 +18,8 @@ typedef struct Player
 {
 	Vector2 position;
 	Texture2D texture;
+	Rectangle bound;
+	Rectangle collision;
 	int speed;
 
 	// Animation related
@@ -58,7 +60,7 @@ void UnloadPlayer(Player *player)
     UnloadTexture(player->texture);
 }
 
-void UpdatePlayer(Player *player)
+void UpdatePlayer(Player *player, Rectangle *rect)
 {
     Vector2 playerDirection = {0.0f, 0.0f};
     bool isMoving = false;
@@ -106,8 +108,21 @@ void UpdatePlayer(Player *player)
         };
     }
 
-    player->position.x += playerDirection.x * player->speed;
-    player->position.y += playerDirection.y * player->speed;
+    Vector2 newPosition = {
+        player->position.x + playerDirection.x * player->speed,
+        player->position.y + playerDirection.y * player->speed
+    };
+
+    Rectangle newBound = (Rectangle){newPosition.x + 6 * 3.2, newPosition.y, 99.0f - 12 * 3.2, 105.5f};
+    Rectangle newCollision = (Rectangle){newBound.x + 6.5 * 1.6, newBound.y + newBound.height - 3.2f * 2.5, 13 * 3.2, 6.4f};
+
+    if (newCollision.x >= rect->x &&
+        newCollision.x + newCollision.width <= rect->x + rect->width &&
+        newCollision.y >= rect->y &&
+        newCollision.y + newCollision.height <= rect->y + rect->height)
+    {
+        player->position = newPosition;
+    }
 
     player->frameRect.y = player->currentSequence * player->frame_height;
     player->frameRect.x = (isMoving ? player->currentFrame : 0) * player->frame_width;
@@ -137,7 +152,10 @@ int main()
 
     while(!WindowShouldClose())
     {
-        UpdatePlayer(&player);
+        UpdatePlayer(&player, &tempFloorRect);
+
+        player.bound = (Rectangle){player.position.x + 6 * 3.2, player.position.y, 99.0f - 12 * 3.2, 105.5f};
+        player.collision = (Rectangle){player.bound.x + 6.5 * 1.6, player.bound.y + player.bound.height - 3.2f * 2.5, 13 * 3.2, 6.4f};
 
         camera.target = (Vector2){
             player.position.x + (float)player.frame_width / 2,
@@ -150,6 +168,8 @@ int main()
 
         BeginMode2D(camera);
             DrawRectangleRec(tempFloorRect, GRAY);
+            DrawRectangleLinesEx(player.bound, 1.0f, WHITE);
+            DrawRectangleLinesEx(player.collision, 1.0f, RED);
             DrawTextureRec(player.texture, player.frameRect, player.position, WHITE);
         EndMode2D();
 
