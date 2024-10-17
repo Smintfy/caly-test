@@ -5,38 +5,52 @@
 
 #define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 720
+
 #define MAX_FPS 60
 #define FRAMES_SPEED 6
-#define TILE_SIZE 128
 
-typedef enum { DOWN, UP, RIGHT, LEFT } PlayerSequence;
+#define TILE_SIZE 128
+#define CHUNK_SIZE 256
+
+static int framesCounter = 0;
+
+typedef enum { DOWN, LEFT, RIGHT, UP } PlayerSequence;
 
 typedef struct Player
 {
 	Vector2 position;
 	Texture2D texture;
-	Rectangle bound, collision, detection;
+	Rectangle collision, detection;
 	float width, height;
 	int speed;
 	bool allowMove;
 
 	// Animation related
 	Rectangle frameRect;
-	int currentFrame, currentSequence, framesCounter;
+	int currentFrame, currentSequence;
+
+	// Stats
+	int health;
 } Player;
 
 typedef struct Object
 {
     Vector2 position;
     Texture2D texture;
-    Rectangle detection, frameRect, collision;
+    Rectangle detection, frameRect, collision; // TODO: collision
 } Object;
+
+typedef struct Map
+{
+    int *tileMap;
+    int width, height;
+} Map;
 
 Player InitPlayer()
 {
 	Player player;
 
-	player.texture = LoadTexture("resources/textures/Acly.png");
+	player.texture = LoadTexture("resources/textures/Hololive.png");
 
 	player.width = (float)player.texture.width / 3;      // The width of each individual sprite
 	player.height = (float)player.texture.height / 4;    // The height of each individual sprite
@@ -49,11 +63,14 @@ Player InitPlayer()
         spawnY * TILE_SIZE
     };
 
+    player.health = 100;
+
+    // TODO: Fix idle frame
+    // Even off-setting the frameRect to player width doesn't help.
+    player.frameRect = (Rectangle){player.width, 0.0f, player.width, player.height};
     player.allowMove = true;
 	player.speed = 4;
-	player.frameRect = (Rectangle){0.0f, 0.0f, player.width, player.height};
-	player.framesCounter = 0;
-	player.currentSequence = 0;
+	player.currentSequence = DOWN;
 	player.currentFrame = 0;
 
 	return player;
@@ -132,6 +149,30 @@ void DrawTileMap(int *tileMap, int width, int height)
     }
 }
 
+void DrawChunkBorder(int mapWidth, int mapHeight, Rectangle *collisionRect)
+{
+    Color color;
+
+    int numChunksX = (int)ceil((float)(mapWidth * TILE_SIZE) / CHUNK_SIZE);
+    int numChunksY = (int)ceil((float)(mapHeight * TILE_SIZE) / CHUNK_SIZE);
+
+    for (int i = 0; i < numChunksX * numChunksY; i++) {
+        int chunkX = i % numChunksX;
+        int chunkY = i / numChunksX;
+        float posX = chunkX * CHUNK_SIZE;
+        float posY = chunkY * CHUNK_SIZE;
+
+        if (collisionRect->x >= posX && collisionRect->x < posX + CHUNK_SIZE &&
+            collisionRect->y >= posY && collisionRect->y < posY + CHUNK_SIZE) {
+            color = GREEN;
+        } else {
+            color = PINK;
+        }
+
+        DrawRectangleLinesEx((Rectangle){posX, posY, CHUNK_SIZE, CHUNK_SIZE}, 1.0f, color);
+    }
+}
+
 bool CheckCollisionTileMap(Rectangle *playerRect, int *tileMap, int mapWidth, int mapHeight)
 {
     int tileStartX = (int)floorf(playerRect->x / TILE_SIZE);
@@ -155,28 +196,22 @@ bool CheckCollisionTileMap(Rectangle *playerRect, int *tileMap, int mapWidth, in
     return false;
 }
 
-// bool CheckCollisionObject(Rectangle *playerRect, Rectangle *objectRect)
-// {
-
-// }
-
 void UpdatePlayer(Player *player, int *mapTile, int mapWidth, int mapHeight)
 {
-    if (!player->allowMove) {
-        return;
-    }
+    framesCounter++;
 
     Vector2 playerDirection = {0.0f, 0.0f};
     bool isMoving = false;
 
-    player->frameRect.x = 0.0f;
-    player->framesCounter++;
+    if (!player->allowMove) return;
 
-    if (player->framesCounter >= (MAX_FPS / FRAMES_SPEED)) {
-        player->framesCounter = 0;
+    if (framesCounter >= (MAX_FPS / FRAMES_SPEED)) {
+        framesCounter = 0;
         player->currentFrame++;
 
         if (player->currentFrame > 2) player->currentFrame = 0;
+
+        player->frameRect.x = (float)player->currentFrame * player->width;
     }
 
     if (IsKeyDown(KEY_W)) {
@@ -204,38 +239,30 @@ void UpdatePlayer(Player *player, int *mapTile, int mapWidth, int mapHeight)
         }
     }
 
-    Vector2 newPosition = {
-        player->position.x + playerDirection.x * player->speed,
-        player->position.y + playerDirection.y * player->speed
-    };
+    Vector2 newPosition = player->position;
 
-    Rectangle newCollision = {
-        newPosition.x + 6.4f * 1.6f + 6 * 3.2f,
-        newPosition.y + player->height - 3.2f * 2.4f,
-        13 * 3.2f,
-        6.4f
-    };
+    // Check horizontal movement
+    newPosition.x += playerDirection.x * player->speed;
+    if (!CheckCollisionTileMap(&(Rectangle){newPosition.x + player->width / 4, player->collision.y, player->width / 2, 12}, mapTile, mapWidth, mapHeight)) {
+        player->position.x = newPosition.x;
+    }
 
-    if (!CheckCollisionTileMap(&newCollision, mapTile, mapWidth, mapHeight))
-        player->position = newPosition;
-
-    player->bound = (Rectangle){
-        player->position.x + 6 * 3.2f,
-        player->position.y,
-        player->width - 12 * 3.2f,
-        player->height
-    };
+    // Check vertical movement
+    newPosition.y = player->position.y + playerDirection.y * player->speed;
+    if (!CheckCollisionTileMap(&(Rectangle){player->collision.x, newPosition.y + player->height - 16, player->width / 2, 12}, mapTile, mapWidth, mapHeight)) {
+        player->position.y = newPosition.y;
+    }
 
     player->collision = (Rectangle){
-        player->bound.x + 6.4f * 1.6f,
-        player->bound.y + player->bound.height - 3.2f * 2.4f,
-        13 * 3.2f,
-        6.4f
+        player->position.x + player->width / 4,
+        player->position.y + player->height - 16,
+        player->width / 2,
+        12
     };
 
     player->detection = (Rectangle){
         player->position.x + (player->width / 2) - (8 * 3.2f / 2),
-        player->position.y + (player->height / 2) - (8 * 3.2f / 2),
+        player->position.y + (player->height / 2),
         8 * 3.2f,
         8 * 3.2f
     };
@@ -276,6 +303,8 @@ int main()
 
     SetTargetFPS(60);
 
+    printf("%f %f", player.frameRect.x, player.frameRect.y);
+
     while(!WindowShouldClose()) {
         UpdatePlayer(&player, testMap, mapWidth, mapHeight);
 
@@ -291,6 +320,9 @@ int main()
         BeginMode2D(camera);
             DrawTileMap(testMap, mapWidth, mapHeight);
 
+            // Debug
+            DrawChunkBorder(mapWidth, mapHeight, &player.collision);
+
             // Penger
             DrawTextureRec(penger.texture, penger.frameRect, penger.position, WHITE);
             DrawRectangleLinesEx(penger.detection, 1.0f, WHITE);
@@ -298,18 +330,16 @@ int main()
             // Player
             DrawTextureRec(player.texture, player.frameRect, player.position, WHITE);
             DrawRectangleLinesEx(player.detection, 2.0f, BLUE);
-            DrawRectangleLinesEx(player.bound, 2.0f, WHITE);
             DrawRectangleLinesEx(player.collision, 2.0f, RED);
         EndMode2D();
 
         if (CheckCollisionRecs(player.detection, penger.detection)) {
             if (GetKeyPressed() == KEY_E) showDialog = !showDialog;
+            if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) showDialog = false;
             DrawText("Object Detected!", 16, 88, 16, GREEN);
-        } else {
-            showDialog = false;
-            StopMusicStream(music);
         }
 
+        // TODO: Extract this to a separate dialog primitive
         if (showDialog) {
             player.allowMove = false;
 
@@ -319,20 +349,29 @@ int main()
             float dialogBoxWidth = SCREEN_WIDTH * 0.6f;
             float dialogBoxHeight = SCREEN_HEIGHT * 0.2f;
             float dialogBoxX = (SCREEN_WIDTH - dialogBoxWidth) / 2;
-            float dialogBoxY = SCREEN_HEIGHT - dialogBoxHeight - 50;
+            float dialogBoxY = SCREEN_HEIGHT - dialogBoxHeight - 32;
 
             DrawRectangle(dialogBoxX, dialogBoxY, dialogBoxWidth, dialogBoxHeight, BLACK);
             DrawRectangleLinesEx((Rectangle){dialogBoxX, dialogBoxY, dialogBoxWidth, dialogBoxHeight}, 2, WHITE);
 
-            const char* dialogText = "Penger: I'm Penger. Your mom's banger!";
+            const char *dialogText = "Penger: I'm Penger. Your mom's banger!";
 
+            // Text padding
             float textOffsetX = 16;
             float textOffsetY = 16;
             DrawText(dialogText, dialogBoxX + textOffsetX, dialogBoxY + textOffsetY, 24, WHITE);
         } else {
+            StopMusicStream(music);
             player.allowMove = true;
         }
 
+        DrawTexture(player.texture, SCREEN_WIDTH - player.texture.width, 0, WHITE);
+        DrawRectangleLinesEx((Rectangle){SCREEN_WIDTH - 48.0f * 3 + player.frameRect.x, player.frameRect.y, player.frameRect.width, player.frameRect.height}, 2.0f, RED);
+
+        // Player stats
+        DrawText(TextFormat("HP: %d", player.health), 16, SCREEN_HEIGHT - 40, 32, WHITE);
+
+        // Debug
         DrawText(TextFormat("FPS: %d", GetFPS()), 16, 16, 16, WHITE);
         DrawText(TextFormat("X, Y: %f, %f", player.position.x, player.position.y), 16, 40, 16, WHITE);
         DrawText(TextFormat("Tx, Ty: %d, %d", (int)floor(player.collision.x / TILE_SIZE), (int)floor(player.collision.y / TILE_SIZE)), 16, 64, 16, WHITE);
