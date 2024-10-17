@@ -50,10 +50,10 @@ Player InitPlayer()
 {
 	Player player;
 
-	player.texture = LoadTexture("resources/textures/Hololive.png");
+    player.texture = LoadTexture("resources/textures/Hololive.png");
 
-	player.width = (float)player.texture.width / 3;      // The width of each individual sprite
-	player.height = (float)player.texture.height / 4;    // The height of each individual sprite
+    player.width = (float)player.texture.width / 3;      // The width of each individual sprite
+    player.height = (float)player.texture.height / 4;    // The height of each individual sprite
 
     int spawnX = 1;
     int spawnY = 1;
@@ -67,6 +67,8 @@ Player InitPlayer()
 
     // TODO: Fix idle frame
     // Even off-setting the frameRect to player width doesn't help.
+    // NOTE: Temporary fix
+    // I basically switched first and second frame
     player.frameRect = (Rectangle){player.width, 0.0f, player.width, player.height};
     player.allowMove = true;
 	player.speed = 4;
@@ -365,8 +367,9 @@ int main()
             player.allowMove = true;
         }
 
-        DrawTexture(player.texture, SCREEN_WIDTH - player.texture.width, 0, WHITE);
-        DrawRectangleLinesEx((Rectangle){SCREEN_WIDTH - 48.0f * 3 + player.frameRect.x, player.frameRect.y, player.frameRect.width, player.frameRect.height}, 2.0f, RED);
+        DrawTexture(player.texture, SCREEN_WIDTH - player.texture.width - 16, 0, WHITE);
+        DrawRectangleLinesEx((Rectangle){SCREEN_WIDTH - 48.0f * 3 + player.frameRect.x - 16, player.frameRect.y, player.frameRect.width, player.frameRect.height}, 2.0f, RED);
+        DrawTextureRec(player.texture, player.frameRect, (Vector2){SCREEN_WIDTH - player.texture.width - player.width - 32, 0}, WHITE);
 
         // Player stats
         DrawText(TextFormat("HP: %d", player.health), 16, SCREEN_HEIGHT - 40, 32, WHITE);
