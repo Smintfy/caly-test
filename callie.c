@@ -1,6 +1,7 @@
 #include "include/raylib.h"
 #include "include/raymath.h"
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 
 #define SCREEN_WIDTH 1280
@@ -13,6 +14,9 @@
 #define CHUNK_SIZE 256
 
 static int framesCounter = 0;
+static int hotbarAmount = 8;
+static int hotbarSize = 64;
+static int spacing = 8;
 
 typedef enum { DOWN, LEFT, RIGHT, UP } PlayerSequence;
 
@@ -45,6 +49,20 @@ typedef struct Map
     int *tileMap;
     int width, height;
 } Map;
+
+typedef struct Item
+{
+    char name[32];
+    int id;
+} Item;
+
+typedef struct Inventory
+{
+    Item items[16];
+    int itemCount;
+    Item hotbarItems[8];
+    int activeSlot;
+} Inventory;
 
 Player InitPlayer()
 {
@@ -106,6 +124,26 @@ Object InitObject(Texture2D *objectTexture, Vector2 tilePosition)
     return object;
 }
 
+void InitInventory(Inventory *inventory)
+{
+    inventory->itemCount = 0;
+    inventory->activeSlot = 0;
+
+    Item dagger = {"Dagger", 1};
+
+    inventory->items[inventory->itemCount++] = dagger;
+
+    // Add items to the inventory
+    for (int i = 0; i < hotbarAmount; i++) {
+        if (i < inventory->itemCount) {
+            inventory->hotbarItems[i] = inventory->items[i];
+        } else {
+            Item emptyItem = {"Empty", 0}; // Placeholder for empty slots
+            inventory->hotbarItems[i] = emptyItem;
+        }
+    }
+}
+
 int *LoadTileMap(const char *filePath, int *width, int *height)
 {
     FILE *file = fopen(filePath, "r");
@@ -148,6 +186,32 @@ void DrawTileMap(int *tileMap, int width, int height)
         int x = i % width;
         int y = i / width;
         if (tileMap[i] == 1) DrawRectangle(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE, GRAY);
+    }
+}
+
+void DrawInventoryHotbar(Inventory *inventory)
+{
+    int totalWidth = (hotbarSize + spacing) * hotbarAmount - spacing;
+    int startX = (SCREEN_WIDTH - totalWidth) / 2;
+
+    for (int i = 0; i < hotbarAmount; i++) {
+        Rectangle slotRect = {
+            startX + i * (hotbarSize + spacing),
+            SCREEN_HEIGHT - hotbarSize - 16,
+            hotbarSize,
+            hotbarSize,
+        };
+
+        DrawRectangleRec(slotRect, (Color){255, 255, 255, 125});
+
+        // Draw the item name if there's an item in the slot
+        if (strcmp(inventory->hotbarItems[i].name, "Empty") != 0 && inventory->activeSlot == i) {
+            DrawText(inventory->hotbarItems[i].name, slotRect.x + 2, slotRect.y - 24, 16, WHITE);
+        }
+
+        if (i == inventory->activeSlot) {
+            DrawRectangleLinesEx(slotRect, 4.0f, WHITE);
+        }
     }
 }
 
@@ -196,6 +260,27 @@ bool CheckCollisionTileMap(Rectangle *playerRect, int *tileMap, int mapWidth, in
         }
     }
     return false;
+}
+
+void UpdateInventoryHotbar(Vector2 *mousePos, Inventory *inventory)
+{
+    int totalWidth = (hotbarSize + spacing) * hotbarAmount - spacing;
+    int startX = (SCREEN_WIDTH - totalWidth) / 2;
+    Rectangle hotbarRect = (Rectangle){startX, SCREEN_HEIGHT - hotbarSize - 16, totalWidth, hotbarSize};
+
+    // Check if the mouse is within the hotbar area
+    if (CheckCollisionPointRec(*mousePos, hotbarRect)) {
+        // DrawText("Mouse Hotbar Hover", 16, 88, 16, GREEN);
+        for (int i = 0; i < hotbarAmount; i++) {
+            // Calculate the position of the current slot
+            Rectangle slotRect = (Rectangle){startX + i * (hotbarSize + spacing), SCREEN_HEIGHT - hotbarSize - 16, hotbarSize, hotbarSize};
+
+            if (CheckCollisionPointRec(*mousePos, slotRect)) {
+                if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) inventory->activeSlot = i;
+                break;
+            }
+        }
+    }
 }
 
 void UpdatePlayer(Player *player, int *mapTile, int mapWidth, int mapHeight)
@@ -277,21 +362,32 @@ int main()
 {
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "callie - test");
     InitAudioDevice();
+    Inventory playerInventory;
 
     int mapWidth, mapHeight;
     int *testMap = LoadTileMap("resources/maps/Test.txt", &mapWidth, &mapHeight);
 
     Player player = InitPlayer();
+    InitInventory(&playerInventory);
 
     // Credit to https://penger.city/
-    Music music = LoadMusicStream("resources/audio/STOMP.ogg");
+    Music pengerMusic = LoadMusicStream("resources/audio/STOMP.ogg");
     Image pengerImage = LoadImage("resources/textures/Penger.png");
     ImageResize(&pengerImage, pengerImage.width * 2, pengerImage.height * 2);
     Texture2D pengerTexture = LoadTextureFromImage(pengerImage);
     UnloadImage(pengerImage);
-
     Vector2 pengerTilePosition = {2.0f + 0.25f , 0.0f - 0.25f};
     Object penger = InitObject(&pengerTexture, pengerTilePosition);
+
+    // Sbeaker
+    // Credit to https://youtu.be/XbCCKAKdSJM?si=NvlzzLTRX21VySf2
+    Music speakerMusic = LoadMusicStream("resources/audio/IDOL_PROJECT.ogg");
+    Image speakerImage = LoadImage("resources/textures/Speaker.png");
+    ImageResize(&speakerImage, speakerImage.width * 2, speakerImage.height * 2);
+    Texture2D speakerTexture = LoadTextureFromImage(speakerImage);
+    UnloadImage(speakerImage);
+    Vector2 speakerTilePosition = {5.0f + 0.25f , 3.0f - 0.25f};
+    Object speaker = InitObject(&speakerTexture, speakerTilePosition);
 
     bool showDialog = false;
 
@@ -302,18 +398,22 @@ int main()
     };
     camera.offset = (Vector2){SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f};
     camera.zoom = 1.0f;
+    const float CAMERA_SPEED = 0.05f;
 
     SetTargetFPS(60);
 
     printf("%f %f", player.frameRect.x, player.frameRect.y);
 
     while(!WindowShouldClose()) {
-        UpdatePlayer(&player, testMap, mapWidth, mapHeight);
+        Vector2 mousePos = GetMousePosition();
 
-        camera.target = (Vector2){
-            player.position.x + (float)player.width / 2,
-            player.position.y + (float)player.height / 2
-        };
+        UpdatePlayer(&player, testMap, mapWidth, mapHeight);
+        UpdateInventoryHotbar(&mousePos, &playerInventory);
+
+        // Update the target position smoothly
+        camera.target.x += (player.position.x + (float)player.width / 2 - camera.target.x) * CAMERA_SPEED;
+        camera.target.y += (player.position.y + (float)player.height / 2 - camera.target.y) * CAMERA_SPEED;
+
 
         BeginDrawing();
 
@@ -325,15 +425,59 @@ int main()
             // Debug
             DrawChunkBorder(mapWidth, mapHeight, &player.collision);
 
-            // Penger
+            // Objects
             DrawTextureRec(penger.texture, penger.frameRect, penger.position, WHITE);
             DrawRectangleLinesEx(penger.detection, 1.0f, WHITE);
+            DrawTextureRec(speaker.texture, speaker.frameRect, speaker.position, WHITE);
+            DrawRectangleLinesEx(speaker.detection, 1.0f, (Color){255, 255, 255, 75});
 
             // Player
             DrawTextureRec(player.texture, player.frameRect, player.position, WHITE);
             DrawRectangleLinesEx(player.detection, 2.0f, BLUE);
             DrawRectangleLinesEx(player.collision, 2.0f, RED);
+
+            // Speaker
+            float distanceToSpeaker = Vector2Distance(
+                (Vector2){player.detection.x + player.detection.width / 2, player.detection.y + player.detection.height / 2},
+                (Vector2){speaker.position.x + (float)speaker.texture.width / 2, speaker.position.y + (float)speaker.texture.height / 2}
+            );
+
+            float volume = 1.0f;
+            const float MAX_DISTANCE = 450.0f;
+
+            if (distanceToSpeaker < 0) {
+                volume = 1.0f;
+            } else if (distanceToSpeaker <= MAX_DISTANCE) {
+                volume = 1.0f - (distanceToSpeaker - 0) / (MAX_DISTANCE - 0);
+            } else {
+                volume = 0.0f;
+            }
+
+            UpdateMusicStream(speakerMusic);
+            SetMusicVolume(speakerMusic, volume);
+
+            if (distanceToSpeaker <= 500) {
+                if (!IsMusicStreamPlaying(speakerMusic)) PlayMusicStream(speakerMusic);
+                float alpha = 255.0f;
+
+                if (distanceToSpeaker > 0) {
+                    alpha = 255.0f * (1.0f - (distanceToSpeaker - 0) / (MAX_DISTANCE - 0));
+                    if (alpha < 0) alpha = 0;
+                }
+
+                Color lineColor = (Color){255, 255, 255, (unsigned char)alpha};
+                DrawLineEx(
+                    (Vector2){player.detection.x + player.detection.width / 2, player.detection.y + player.detection.height / 2},
+                    (Vector2){speaker.position.x + (float)speaker.texture.width / 2, speaker.position.y + (float)speaker.texture.height / 2},
+                    1.5f,
+                    lineColor
+                );
+            }
         EndMode2D();
+
+        // Player stats
+        DrawText(TextFormat("HP: %d", player.health), 16, SCREEN_HEIGHT - 40, 32, WHITE);
+        DrawInventoryHotbar(&playerInventory);
 
         if (CheckCollisionRecs(player.detection, penger.detection)) {
             if (GetKeyPressed() == KEY_E) showDialog = !showDialog;
@@ -345,13 +489,13 @@ int main()
         if (showDialog) {
             player.allowMove = false;
 
-            if (!IsMusicStreamPlaying(music)) PlayMusicStream(music);
-            UpdateMusicStream(music);
+            if (!IsMusicStreamPlaying(pengerMusic)) PlayMusicStream(pengerMusic);
+            UpdateMusicStream(pengerMusic);
 
             float dialogBoxWidth = SCREEN_WIDTH * 0.6f;
             float dialogBoxHeight = SCREEN_HEIGHT * 0.2f;
             float dialogBoxX = (SCREEN_WIDTH - dialogBoxWidth) / 2;
-            float dialogBoxY = SCREEN_HEIGHT - dialogBoxHeight - 32;
+            float dialogBoxY = SCREEN_HEIGHT - dialogBoxHeight - 16;
 
             DrawRectangle(dialogBoxX, dialogBoxY, dialogBoxWidth, dialogBoxHeight, BLACK);
             DrawRectangleLinesEx((Rectangle){dialogBoxX, dialogBoxY, dialogBoxWidth, dialogBoxHeight}, 2, WHITE);
@@ -363,16 +507,13 @@ int main()
             float textOffsetY = 16;
             DrawText(dialogText, dialogBoxX + textOffsetX, dialogBoxY + textOffsetY, 24, WHITE);
         } else {
-            StopMusicStream(music);
+            StopMusicStream(pengerMusic);
             player.allowMove = true;
         }
 
         DrawTexture(player.texture, SCREEN_WIDTH - player.texture.width - 16, 0, WHITE);
         DrawRectangleLinesEx((Rectangle){SCREEN_WIDTH - 48.0f * 3 + player.frameRect.x - 16, player.frameRect.y, player.frameRect.width, player.frameRect.height}, 2.0f, RED);
         DrawTextureRec(player.texture, player.frameRect, (Vector2){SCREEN_WIDTH - player.texture.width - player.width - 32, 0}, WHITE);
-
-        // Player stats
-        DrawText(TextFormat("HP: %d", player.health), 16, SCREEN_HEIGHT - 40, 32, WHITE);
 
         // Debug
         DrawText(TextFormat("FPS: %d", GetFPS()), 16, 16, 16, WHITE);
@@ -383,8 +524,8 @@ int main()
     }
 
     UnloadTileMap(testMap);
-    UnloadMusicStream(music);
-    UnloadObject(&penger);
+    UnloadMusicStream(pengerMusic); UnloadMusicStream(speakerMusic);
+    UnloadObject(&penger); UnloadObject(&speaker);
     UnloadPlayer(&player);
     CloseWindow();
 
